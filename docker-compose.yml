@@ -1,0 +1,130 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:14-alpine
+    container_name: vlaapi-postgres
+    environment:
+      POSTGRES_USER: vlaapi
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: vlaapi
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vlaapi"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vlaapi-network
+
+  # Redis cache
+  redis:
+    image: redis:7-alpine
+    container_name: vlaapi-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vlaapi-network
+
+  # VLA API (Development - no GPU)
+  api-dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: vlaapi-dev
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://vlaapi:password@postgres:5432/vlaapi
+      - REDIS_URL=redis://redis:6379/0
+      - USE_MOCK_MODELS=true  # Use mock models for dev without GPU
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+    networks:
+      - vlaapi-network
+    profiles:
+      - dev
+
+  # VLA API (Production - with GPU)
+  api-prod:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: vlaapi-prod
+    runtime: nvidia  # Requires nvidia-docker
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://vlaapi:password@postgres:5432/vlaapi
+      - REDIS_URL=redis://redis:6379/0
+      - USE_MOCK_MODELS=false
+      - GPU_DEVICE=0
+      - MODEL_DTYPE=bfloat16
+      - ENVIRONMENT=production
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+      - ./config:/app/config:ro
+      - model_cache:/models
+    networks:
+      - vlaapi-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    profiles:
+      - prod
+
+  # NGINX (optional - for production load balancing)
+  nginx:
+    image: nginx:alpine
+    container_name: vlaapi-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api-prod
+    networks:
+      - vlaapi-network
+    profiles:
+      - prod
+
+volumes:
+  postgres_data:
+  redis_data:
+  model_cache:
+
+networks:
+  vlaapi-network:
+    driver: bridge

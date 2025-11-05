@@ -6,5 +6,21 @@
     "duration": 7.158918000000028,
     "timestamp": 1760925940646,
     "metadata": {}
+  },
+  {
+    "id": "cmd-init-1761359415704",
+    "type": "init",
+    "success": true,
+    "duration": 24365.484083,
+    "timestamp": 1761359440069,
+    "metadata": {}
+  },
+  {
+    "id": "cmd-memory-1761359500650",
+    "type": "memory",
+    "success": true,
+    "duration": 221.134708,
+    "timestamp": 1761359500871,
+    "metadata": {}
   }
 ]

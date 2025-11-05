@@ -1,0 +1,49 @@
+# VLA Inference API Platform - Core Dependencies
+# Python 3.10+
+
+# API Framework
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic==2.9.2
+pydantic-settings==2.6.0
+python-multipart==0.0.12
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+psycopg2-binary==2.9.10
+
+# Redis
+redis[hiredis]==5.2.0
+hiredis==2.3.2
+
+# VLA Models & ML
+torch==2.5.1
+transformers==4.46.0
+accelerate==1.0.1
+pillow==11.0.0
+numpy==1.26.4
+opencv-python==4.10.0.84
+sentencepiece==0.2.0
+protobuf==5.28.3
+
+# Authentication & Security
+passlib[bcrypt]==1.7.4
+pyjwt==2.9.0
+cryptography==43.0.3
+python-jose[cryptography]==3.3.0
+
+# Monitoring & Logging
+prometheus-client==0.21.0
+python-json-logger==3.1.0
+
+# Rate Limiting
+slowapi==0.1.9
+limits==3.13.0
+
+# Utilities
+python-dotenv==1.0.1
+httpx==0.27.2
+tenacity==9.0.0
+pyyaml==6.0.2
