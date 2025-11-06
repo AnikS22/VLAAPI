@@ -13,6 +13,14 @@ from PIL import Image
 
 from src.core.config import settings
 from src.core.constants import get_model_config
+from src.monitoring.prometheus_metrics import (
+    inference_gpu_compute_seconds,
+    inference_queue_depth,
+    inference_queue_wait_seconds,
+    inference_requests_total,
+    record_inference_request,
+    update_queue_metrics,
+)
 from src.services.model_loader import model_manager
 from src.utils.action_processing import clip_action_to_limits, unnormalize_action
 from src.utils.image_processing import preprocess_image
@@ -31,6 +39,9 @@ class InferenceRequest:
     robot_type: str
     robot_config: Optional[Dict] = None
     timestamp: float = 0.0
+    generate_embeddings: bool = False
+    customer_id: Optional[str] = None
+    analytics_id: Optional[int] = None
 
     def __post_init__(self):
         """Set timestamp after initialization."""
@@ -49,6 +60,8 @@ class InferenceResult:
     inference_ms: int
     success: bool
     error: Optional[str] = None
+    instruction_embedding: Optional[np.ndarray] = None
+    image_embedding: Optional[np.ndarray] = None
 
 
 class VLAInferenceService:
@@ -62,6 +75,10 @@ class VLAInferenceService:
         self._results: Dict[UUID, InferenceResult] = {}
         self._workers: List[asyncio.Task] = []
         self._running = False
+
+        # Embedding service will be set by main.py
+        self._embedding_service: Optional[Any] = None
+        self._enable_embeddings = getattr(settings, "enable_embeddings", False)
 
     async def start(self) -> None:
         """Start inference workers."""
@@ -95,6 +112,7 @@ class VLAInferenceService:
         await asyncio.gather(*self._workers, return_exceptions=True)
 
         self._workers.clear()
+
         logger.info("Inference service stopped")
 
     async def _worker(self, worker_id: int) -> None:
@@ -206,6 +224,36 @@ class VLAInferenceService:
             # Calculate total latency
             total_latency_ms = int((time.time() - start_time) * 1000)
 
+            # Record Prometheus metrics
+            record_inference_request(
+                model=request.model_id,
+                robot_type=request.robot_type,
+                status="success",
+                duration_seconds=total_latency_ms / 1000.0,
+                queue_wait_seconds=queue_wait_ms / 1000.0,
+                gpu_compute_seconds=inference_ms / 1000.0,
+                safety_score=1.0,  # Will be updated after safety check
+            )
+
+            # Generate embeddings if requested and service is available
+            instruction_embedding = None
+            image_embedding = None
+
+            if request.generate_embeddings and self._embedding_service:
+                try:
+                    # Generate embeddings asynchronously
+                    logger.debug("Generating embeddings for analytics")
+                    instruction_embedding = await self._embedding_service.get_instruction_embedding(
+                        request.instruction
+                    )
+                    image_embedding = await self._embedding_service.get_image_embedding(
+                        request.image
+                    )
+                    logger.debug("Embeddings generated successfully")
+                except Exception as e:
+                    logger.error(f"Failed to generate embeddings: {e}")
+                    # Don't fail the inference if embedding generation fails
+
             return InferenceResult(
                 request_id=request.request_id,
                 action=action,
@@ -213,11 +261,18 @@ class VLAInferenceService:
                 queue_wait_ms=queue_wait_ms,
                 inference_ms=inference_ms,
                 success=True,
+                instruction_embedding=instruction_embedding,
+                image_embedding=image_embedding,
             )
 
         except Exception as e:
             logger.error(f"Inference failed: {e}", exc_info=True)
             total_latency_ms = int((time.time() - start_time) * 1000)
+
+            # Record error metrics
+            inference_requests_total.labels(
+                model=request.model_id, robot_type=request.robot_type, status="error"
+            ).inc()
 
             return InferenceResult(
                 request_id=request.request_id,
@@ -271,6 +326,9 @@ class VLAInferenceService:
         robot_type: str = "franka_panda",
         robot_config: Optional[Dict] = None,
         timeout: float = 10.0,
+        generate_embeddings: bool = False,
+        customer_id: Optional[str] = None,
+        analytics_id: Optional[int] = None,
     ) -> InferenceResult:
         """Submit inference request and wait for result.
 
@@ -281,6 +339,9 @@ class VLAInferenceService:
             robot_type: Robot type
             robot_config: Optional robot configuration
             timeout: Timeout in seconds
+            generate_embeddings: Whether to generate embeddings for analytics
+            customer_id: Customer ID for consent tracking
+            analytics_id: Analytics record ID for embedding storage
 
         Returns:
             Inference result
@@ -297,6 +358,9 @@ class VLAInferenceService:
             instruction=instruction,
             robot_type=robot_type,
             robot_config=robot_config,
+            generate_embeddings=generate_embeddings,
+            customer_id=customer_id,
+            analytics_id=analytics_id,
         )
 
         # Add to queue
@@ -322,7 +386,24 @@ class VLAInferenceService:
         Returns:
             Number of requests in queue
         """
-        return self._queue.qsize()
+        depth = self._queue.qsize()
+
+        # Update Prometheus queue metrics
+        update_queue_metrics(
+            current_depth=depth,
+            max_size=settings.inference_queue_max_size
+        )
+
+        return depth
+
+    def set_embedding_service(self, service) -> None:
+        """Set embedding service instance from main app.
+
+        Args:
+            service: EmbeddingService instance
+        """
+        self._embedding_service = service
+        logger.info("Embedding service linked to inference service")
 
 
 # Global inference service instance

@@ -72,19 +72,41 @@ Thumbs.db
 .cache/
 tmp/
 
-# Claude-Flow specific
-claude-flow.db
-claude-flow.config.json
-# memory/
-# sessions/
-
-# MCP/Swarm
+# Claude-Flow - Exclude ALL Claude-Flow related files
+.claude/
+.claude-flow/
+.claude-plugin/
+.hive-mind/
 .ruv-swarm/
+.swarm/
+.research/
+memory/
+coordination/
+sessions/
+claude-flow
+claude-flow.db*
+claude-flow.config.json
+.mcp.json
 mcp-server.log
 swarm-debug.log
-memory/backups/
 ui_*.log
 init-output.log
+hive-mind-prompt-*.txt
+claude-flow-mcp-wrapper
+.roo/
+.roomodes
+
+# Claude-Flow build outputs
+bin/claude-flow-*
+!bin/claude-flow.js
+
+# SQLite Database Files
+*.db
+*.db-journal
+*.db-wal
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
 
 # Development
 *.pid
@@ -95,20 +117,9 @@ test-init
 test-full-init
 swarm-runs
 
-# Temporary files
-analyzing
-the
-claude-flow-mcp-wrapper
-
 # Test artifacts
 test-output/
 test-reports/
-# SQLite Database Files
-.swarm/memory.db*
-.hive-mind/hive.db*
-
-
-
 
 
 

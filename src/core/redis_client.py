@@ -351,6 +351,23 @@ class RedisManager:
         except RedisError:
             return False
 
+    async def setex(self, key: str, seconds: int, value: Any) -> bool:
+        """Set key-value pair with expiration.
+
+        Args:
+            key: Redis key
+            seconds: Expiration time in seconds
+            value: Value to store
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            await self.redis.setex(key, seconds, value)
+            return True
+        except RedisError:
+            return False
+
     async def health_check(self) -> bool:
         """Check Redis connectivity.
 

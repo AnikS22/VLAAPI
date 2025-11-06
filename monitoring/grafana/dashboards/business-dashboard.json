@@ -1,0 +1,266 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "vla-business",
+    "title": "VLA API Business Dashboard",
+    "tags": ["vla", "business", "revenue"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "5m",
+    "time": {
+      "from": "now-30d",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Daily Inference Counts by Tier",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum by(tier) (increase(vla_inference_requests_total[1d]))",
+            "legendFormat": "{{tier}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 50
+            }
+          }
+        },
+        "options": {
+          "legend": {"displayMode": "table", "placement": "right"}
+        }
+      },
+      {
+        "id": 2,
+        "title": "Revenue by Tier (30d)",
+        "type": "piechart",
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum by(tier) (increase(vla_revenue_total[30d]))",
+            "legendFormat": "{{tier}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "decimals": 0
+          }
+        },
+        "options": {
+          "pieType": "donut",
+          "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]}
+        }
+      },
+      {
+        "id": 3,
+        "title": "Customer Growth",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum(increase(vla_customers_total[1d]))",
+            "legendFormat": "New Customers",
+            "refId": "A"
+          },
+          {
+            "expr": "vla_customers_active",
+            "legendFormat": "Active Customers",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Usage by Model",
+        "type": "bargauge",
+        "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum by(model) (increase(vla_inference_requests_total[30d]))",
+            "legendFormat": "{{model}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0
+          }
+        },
+        "options": {
+          "orientation": "horizontal",
+          "displayMode": "gradient"
+        }
+      },
+      {
+        "id": 5,
+        "title": "Top 10 Customers by Usage",
+        "type": "table",
+        "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "topk(10, sum by(customer_id) (increase(vla_inference_requests_total[30d])))",
+            "format": "table",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "left",
+              "displayMode": "auto"
+            }
+          }
+        },
+        "options": {
+          "showHeader": true,
+          "sortBy": [{"displayName": "Value", "desc": true}]
+        },
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "renameByName": {
+                "customer_id": "Customer ID",
+                "Value": "Total Requests"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Quota Utilization by Tier",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "avg by(tier) (vla_quota_used / vla_quota_limit * 100)",
+            "legendFormat": "{{tier}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 75, "color": "yellow"},
+                {"value": 90, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Monthly Recurring Revenue (MRR)",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 24, "w": 8, "h": 6},
+        "targets": [
+          {
+            "expr": "sum(vla_mrr_total)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "blue"}
+              ]
+            }
+          }
+        },
+        "options": {
+          "textMode": "value_and_name",
+          "graphMode": "area",
+          "colorMode": "background"
+        }
+      },
+      {
+        "id": 8,
+        "title": "Average Revenue Per User (ARPU)",
+        "type": "stat",
+        "gridPos": {"x": 8, "y": 24, "w": 8, "h": 6},
+        "targets": [
+          {
+            "expr": "sum(vla_revenue_total) / sum(vla_customers_active)",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "currencyUSD",
+            "decimals": 2,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"}
+              ]
+            }
+          }
+        },
+        "options": {
+          "textMode": "value_and_name",
+          "graphMode": "area",
+          "colorMode": "background"
+        }
+      },
+      {
+        "id": 9,
+        "title": "Churn Rate",
+        "type": "stat",
+        "gridPos": {"x": 16, "y": 24, "w": 8, "h": 6},
+        "targets": [
+          {
+            "expr": "sum(increase(vla_customers_churned[30d])) / sum(vla_customers_total) * 100",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 2,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 3, "color": "yellow"},
+                {"value": 5, "color": "red"}
+              ]
+            }
+          }
+        },
+        "options": {
+          "textMode": "value_and_name",
+          "graphMode": "area",
+          "colorMode": "background"
+        }
+      }
+    ]
+  }
+}

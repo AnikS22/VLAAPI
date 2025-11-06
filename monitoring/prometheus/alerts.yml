@@ -1,0 +1,231 @@
+groups:
+  - name: vla_api_alerts
+    interval: 15s
+    rules:
+      # Critical Alerts
+      - alert: HighErrorRate
+        expr: rate(vla_inference_requests_total{status="error"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "High error rate detected: {{ $value | humanizePercentage }}"
+          description: "Error rate has exceeded 5% for the last 5 minutes on {{ $labels.instance }}"
+          runbook_url: "https://docs.vla-api.com/runbooks/high-error-rate"
+
+      - alert: HighLatency
+        expr: histogram_quantile(0.99, rate(vla_inference_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: inference
+        annotations:
+          summary: "High inference latency: {{ $value }}s at p99"
+          description: "99th percentile latency has exceeded 2 seconds for 5 minutes"
+          runbook_url: "https://docs.vla-api.com/runbooks/high-latency"
+
+      - alert: GPUOverheating
+        expr: vla_gpu_temperature_celsius > 85
+        for: 2m
+        labels:
+          severity: critical
+          component: hardware
+        annotations:
+          summary: "GPU overheating: {{ $value }}°C on GPU {{ $labels.gpu_id }}"
+          description: "GPU temperature has exceeded 85°C for 2 minutes - immediate action required"
+          runbook_url: "https://docs.vla-api.com/runbooks/gpu-overheating"
+
+      - alert: GPUMemoryHigh
+        expr: vla_gpu_memory_used_bytes / vla_gpu_memory_total_bytes > 0.95
+        for: 5m
+        labels:
+          severity: warning
+          component: hardware
+        annotations:
+          summary: "GPU memory usage critical: {{ $value | humanizePercentage }}"
+          description: "GPU {{ $labels.gpu_id }} memory usage has exceeded 95% for 5 minutes"
+          runbook_url: "https://docs.vla-api.com/runbooks/gpu-memory"
+
+      - alert: HighQueueDepth
+        expr: vla_inference_queue_depth > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: queue
+        annotations:
+          summary: "High inference queue depth: {{ $value }}"
+          description: "Inference queue has more than 80 pending requests for 5 minutes"
+          runbook_url: "https://docs.vla-api.com/runbooks/queue-depth"
+
+      # Safety Alerts
+      - alert: SafetyIncidentSurge
+        expr: rate(vla_safety_rejections_total[1h]) > 100
+        for: 10m
+        labels:
+          severity: critical
+          component: safety
+        annotations:
+          summary: "Safety incident surge: {{ $value }} rejections/hour"
+          description: "Safety rejection rate has exceeded 100 per hour - possible attack or system issue"
+          runbook_url: "https://docs.vla-api.com/runbooks/safety-surge"
+
+      - alert: CriticalSafetyIncident
+        expr: increase(vla_safety_incidents_total{severity="critical"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: safety
+        annotations:
+          summary: "Critical safety incident detected"
+          description: "A critical safety incident has occurred - immediate review required"
+          runbook_url: "https://docs.vla-api.com/runbooks/critical-safety"
+
+      - alert: LowSafetyScore
+        expr: avg(vla_safety_score) < 0.7
+        for: 15m
+        labels:
+          severity: warning
+          component: safety
+        annotations:
+          summary: "Average safety score below threshold: {{ $value }}"
+          description: "System-wide safety score has dropped below 0.7"
+          runbook_url: "https://docs.vla-api.com/runbooks/low-safety-score"
+
+      # Data Quality Alerts
+      - alert: HighValidationFailureRate
+        expr: rate(vla_validation_failures_total[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          component: validation
+        annotations:
+          summary: "High validation failure rate: {{ $value | humanizePercentage }}"
+          description: "Data quality issues detected - validation failures exceeding 1%"
+          runbook_url: "https://docs.vla-api.com/runbooks/validation-failures"
+
+      - alert: MissingRequiredFields
+        expr: increase(vla_validation_failures_total{reason="missing_field"}[10m]) > 50
+        for: 5m
+        labels:
+          severity: warning
+          component: validation
+        annotations:
+          summary: "High rate of missing required fields in requests"
+          description: "More than 50 requests with missing fields in the last 10 minutes"
+          runbook_url: "https://docs.vla-api.com/runbooks/missing-fields"
+
+      # Business Alerts
+      - alert: QuotaExceeded
+        expr: vla_quota_used / vla_quota_limit > 0.95
+        for: 5m
+        labels:
+          severity: warning
+          component: billing
+        annotations:
+          summary: "Customer {{ $labels.customer_id }} approaching quota limit: {{ $value | humanizePercentage }}"
+          description: "Customer has used more than 95% of their quota"
+          runbook_url: "https://docs.vla-api.com/runbooks/quota-exceeded"
+
+      - alert: HighChurnRate
+        expr: sum(increase(vla_customers_churned[7d])) / sum(vla_customers_total) > 0.05
+        for: 1h
+        labels:
+          severity: warning
+          component: business
+        annotations:
+          summary: "High customer churn rate: {{ $value | humanizePercentage }}"
+          description: "Weekly churn rate exceeds 5% - review customer satisfaction"
+          runbook_url: "https://docs.vla-api.com/runbooks/high-churn"
+
+      # System Health Alerts
+      - alert: WorkerOverloaded
+        expr: vla_worker_active / vla_worker_total > 0.95
+        for: 10m
+        labels:
+          severity: warning
+          component: workers
+        annotations:
+          summary: "Worker pool at {{ $value | humanizePercentage }} capacity"
+          description: "Worker utilization exceeds 95% - consider scaling"
+          runbook_url: "https://docs.vla-api.com/runbooks/worker-overload"
+
+      - alert: ServiceDown
+        expr: up{job="vla-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "VLA API service is down on {{ $labels.instance }}"
+          description: "Service health check failed - immediate attention required"
+          runbook_url: "https://docs.vla-api.com/runbooks/service-down"
+
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes / 1024 / 1024 / 1024 > 8
+        for: 10m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High memory usage: {{ $value }}GB on {{ $labels.instance }}"
+          description: "Process memory usage exceeds 8GB"
+          runbook_url: "https://docs.vla-api.com/runbooks/high-memory"
+
+      # Rate Limiting Alerts
+      - alert: RateLimitHitRate
+        expr: rate(vla_rate_limit_exceeded_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: rate-limiting
+        annotations:
+          summary: "High rate limit hit rate: {{ $value }}/s"
+          description: "Many requests are hitting rate limits - review limits or traffic patterns"
+          runbook_url: "https://docs.vla-api.com/runbooks/rate-limiting"
+
+      # Model Performance Alerts
+      - alert: ModelInferenceFailure
+        expr: rate(vla_inference_requests_total{status="model_error"}[5m]) > 0.02
+        for: 5m
+        labels:
+          severity: critical
+          component: model
+        annotations:
+          summary: "Model inference failures on {{ $labels.model }}: {{ $value | humanizePercentage }}"
+          description: "Model {{ $labels.model }} is experiencing high failure rate"
+          runbook_url: "https://docs.vla-api.com/runbooks/model-failures"
+
+      - alert: SlowModelLoading
+        expr: histogram_quantile(0.95, rate(vla_model_load_duration_seconds_bucket[5m])) > 30
+        for: 5m
+        labels:
+          severity: warning
+          component: model
+        annotations:
+          summary: "Slow model loading: {{ $value }}s at p95"
+          description: "Model loading time exceeds 30 seconds at 95th percentile"
+          runbook_url: "https://docs.vla-api.com/runbooks/slow-model-load"
+
+      # Database Alerts
+      - alert: DatabaseConnectionPoolExhausted
+        expr: vla_db_connections_active / vla_db_connections_max > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Database connection pool at {{ $value | humanizePercentage }} capacity"
+          description: "Database connection pool is nearly exhausted"
+          runbook_url: "https://docs.vla-api.com/runbooks/db-connections"
+
+      - alert: SlowDatabaseQueries
+        expr: histogram_quantile(0.95, rate(vla_db_query_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Slow database queries: {{ $value }}s at p95"
+          description: "Database query latency exceeds 1 second at 95th percentile"
+          runbook_url: "https://docs.vla-api.com/runbooks/slow-queries"

@@ -1,0 +1,26 @@
+# Embedding Service Dependencies
+# Add these to your main requirements.txt or install separately
+
+# Sentence transformers for text embeddings
+sentence-transformers==2.2.2
+
+# HuggingFace transformers for CLIP
+transformers==4.35.0
+
+# PyTorch (if not already installed)
+torch>=2.0.0
+
+# Pillow for image processing (if not already installed)
+Pillow>=10.0.0
+
+# Redis for caching
+redis[hiredis]>=5.0.0
+
+# NumPy (if not already installed)
+numpy>=1.24.0
+
+# PostgreSQL with pgvector support
+psycopg2-binary>=2.9.9
+
+# Optional: Accelerate for faster model loading
+accelerate>=0.24.0

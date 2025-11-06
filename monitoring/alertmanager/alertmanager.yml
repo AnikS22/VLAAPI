@@ -1,0 +1,151 @@
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: 'smtp.gmail.com:587'
+  smtp_from: 'alerts@vla-api.com'
+  smtp_auth_username: 'alerts@vla-api.com'
+  smtp_auth_password: 'changeme'
+  smtp_require_tls: true
+
+# Templates for notifications
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'
+
+# Route tree for alert routing
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+  receiver: 'default'
+
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      group_wait: 0s
+      repeat_interval: 5m
+      continue: true
+
+    # Warning alerts
+    - match:
+        severity: warning
+      receiver: 'warning-alerts'
+      repeat_interval: 30m
+
+    # Safety alerts
+    - match:
+        component: safety
+      receiver: 'safety-team'
+      group_wait: 5s
+      repeat_interval: 15m
+
+    # Business alerts
+    - match:
+        component: business
+      receiver: 'business-team'
+      repeat_interval: 1h
+
+    # GPU/Hardware alerts
+    - match:
+        component: hardware
+      receiver: 'ops-team'
+      group_wait: 2m
+      repeat_interval: 10m
+
+# Inhibition rules - suppress certain alerts when others are firing
+inhibit_rules:
+  # Suppress warning if critical is firing
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
+
+  # Suppress downstream alerts if service is down
+  - source_match:
+      alertname: 'ServiceDown'
+    target_match_re:
+      alertname: '.*'
+    equal: ['instance']
+
+# Receivers - notification channels
+receivers:
+  # Default receiver
+  - name: 'default'
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#vla-alerts'
+        title: 'VLA API Alert'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        send_resolved: true
+
+  # Critical alerts - multiple channels
+  - name: 'critical-alerts'
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#vla-critical'
+        title: 'CRITICAL: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        send_resolved: true
+    email_configs:
+      - to: 'oncall@vla-api.com'
+        from: 'alerts@vla-api.com'
+        smarthost: 'smtp.gmail.com:587'
+        auth_username: 'alerts@vla-api.com'
+        auth_password: 'changeme'
+        headers:
+          Subject: 'CRITICAL ALERT: {{ .GroupLabels.alertname }}'
+        html: |
+          <h2>Critical Alert Fired</h2>
+          <p><strong>Alert:</strong> {{ .GroupLabels.alertname }}</p>
+          <p><strong>Severity:</strong> {{ .CommonLabels.severity }}</p>
+          {{ range .Alerts }}
+          <p><strong>Summary:</strong> {{ .Annotations.summary }}</p>
+          <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+          <p><strong>Runbook:</strong> <a href="{{ .Annotations.runbook_url }}">{{ .Annotations.runbook_url }}</a></p>
+          {{ end }}
+        send_resolved: true
+    pagerduty_configs:
+      - service_key: 'YOUR_PAGERDUTY_SERVICE_KEY'
+        description: '{{ .GroupLabels.alertname }}: {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+
+  # Warning alerts
+  - name: 'warning-alerts'
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#vla-warnings'
+        title: 'Warning: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        send_resolved: true
+
+  # Safety team
+  - name: 'safety-team'
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#vla-safety'
+        title: 'Safety Alert: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+        send_resolved: true
+    email_configs:
+      - to: 'safety-team@vla-api.com'
+        from: 'alerts@vla-api.com'
+        headers:
+          Subject: 'Safety Alert: {{ .GroupLabels.alertname }}'
+
+  # Business team
+  - name: 'business-team'
+    email_configs:
+      - to: 'business-team@vla-api.com'
+        from: 'alerts@vla-api.com'
+        headers:
+          Subject: 'Business Alert: {{ .GroupLabels.alertname }}'
+
+  # Operations team
+  - name: 'ops-team'
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK'
+        channel: '#vla-ops'
+        title: 'Hardware Alert: {{ .GroupLabels.alertname }}'
+        text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}'
+        send_resolved: true

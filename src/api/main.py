@@ -1,17 +1,24 @@
 """Main FastAPI application for VLA Inference API Platform."""
 
+import asyncio
 import logging
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from prometheus_client import make_asgi_app
 
 from src.api.routers import inference, models, monitoring, streaming
+from src.api.routers.feedback import router as feedback_router
 from src.core.config import settings
 from src.core.database import close_db, init_db
 from src.core.redis_client import close_redis, init_redis
 from src.middleware.logging import RequestLoggingMiddleware
+from src.monitoring.gpu_monitor import start_gpu_monitoring, stop_gpu_monitoring
+from src.monitoring.prometheus_metrics import application_info, application_uptime_seconds
+from src.services.embeddings.embedding_service import EmbeddingService
 from src.services.model_loader import init_models, shutdown_models
 from src.services.vla_inference import (
     start_inference_service,
@@ -37,11 +44,19 @@ async def lifespan(app: FastAPI):
         None (context manager)
     """
     # Startup
+    startup_time = time.time()
     logger.info("Starting VLA Inference API Platform")
     logger.info(f"Environment: {settings.environment}")
     logger.info(f"Debug mode: {settings.debug}")
 
     try:
+        # Set application info in Prometheus
+        application_info.info({
+            "version": settings.app_version,
+            "environment": settings.environment,
+            "python_version": "3.10+"
+        })
+
         # Initialize database
         logger.info("Initializing database connection")
         await init_db()
@@ -50,6 +65,20 @@ async def lifespan(app: FastAPI):
         logger.info("Initializing Redis connection")
         await init_redis()
 
+        # Initialize GPU monitoring
+        if settings.enable_gpu_monitoring:
+            logger.info("Starting GPU monitoring")
+            await start_gpu_monitoring()
+
+        # Initialize embedding service
+        if settings.enable_embeddings:
+            logger.info("Initializing embedding service")
+            app.state.embedding_service = EmbeddingService(
+                text_model_name=settings.instruction_embedding_model,
+                image_model_name=settings.image_embedding_model
+            )
+            logger.info("Embedding service initialized")
+
         # Load VLA models
         logger.info("Loading VLA models")
         await init_models()
@@ -57,6 +86,19 @@ async def lifespan(app: FastAPI):
         # Start inference service
         logger.info("Starting inference service")
         await start_inference_service()
+
+        # Start uptime tracking
+        app.state.startup_time = startup_time
+
+        # Create background task for uptime metric
+        async def update_uptime():
+            while True:
+                uptime = time.time() - startup_time
+                application_uptime_seconds.set(uptime)
+                await asyncio.sleep(10)
+
+        uptime_task = asyncio.create_task(update_uptime())
+        app.state.uptime_task = uptime_task
 
         logger.info("VLA Inference API Platform started successfully")
 
@@ -70,6 +112,14 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down VLA Inference API Platform")
 
     try:
+        # Cancel uptime tracking
+        if hasattr(app.state, 'uptime_task'):
+            app.state.uptime_task.cancel()
+            try:
+                await app.state.uptime_task
+            except asyncio.CancelledError:
+                pass
+
         # Stop inference service
         logger.info("Stopping inference service")
         await stop_inference_service()
@@ -77,6 +127,16 @@ async def lifespan(app: FastAPI):
         # Shutdown models
         logger.info("Shutting down models")
         await shutdown_models()
+
+        # Cleanup embedding service
+        if hasattr(app.state, 'embedding_service'):
+            logger.info("Cleaning up embedding service")
+            app.state.embedding_service.cleanup()
+
+        # Stop GPU monitoring
+        if settings.enable_gpu_monitoring:
+            logger.info("Stopping GPU monitoring")
+            await stop_gpu_monitoring()
 
         # Close Redis
         logger.info("Closing Redis connection")
@@ -115,11 +175,18 @@ app.add_middleware(
 # Add request logging middleware
 app.add_middleware(RequestLoggingMiddleware)
 
+# Mount Prometheus metrics endpoint
+if settings.enable_prometheus:
+    metrics_app = make_asgi_app()
+    app.mount("/metrics", metrics_app)
+    logger.info("Prometheus metrics endpoint mounted at /metrics")
+
 # Include routers
 app.include_router(inference.router)
 app.include_router(models.router)
 app.include_router(monitoring.router)
 app.include_router(streaming.router)  # WebSocket streaming
+app.include_router(feedback_router)  # Feedback for ground truth collection
 
 
 # Root endpoint
@@ -134,6 +201,7 @@ async def root():
             "single_inference": True,
             "streaming_inference": True,
             "safety_monitoring": True,
+            "feedback_collection": True,
         },
         "docs": "/docs" if not settings.is_production else "disabled",
     }

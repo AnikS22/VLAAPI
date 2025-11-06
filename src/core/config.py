@@ -285,6 +285,105 @@ class Settings(BaseSettings):
     )
 
     # =========================================================================
+    # MONITORING & GPU
+    # =========================================================================
+    enable_prometheus: bool = Field(
+        default=True, description="Enable Prometheus metrics"
+    )
+    enable_gpu_monitoring: bool = Field(
+        default=True, description="Enable GPU monitoring"
+    )
+    gpu_poll_interval: int = Field(
+        default=5, ge=1, le=60, description="GPU polling interval (seconds)"
+    )
+
+    # =========================================================================
+    # EMBEDDINGS
+    # =========================================================================
+    enable_embeddings: bool = Field(
+        default=True, description="Enable embeddings generation"
+    )
+    instruction_embedding_model: str = Field(
+        default="sentence-transformers/all-MiniLM-L6-v2",
+        description="Text embedding model"
+    )
+    image_embedding_model: str = Field(
+        default="openai/clip-vit-base-patch32",
+        description="Image embedding model (CLIP)"
+    )
+    embedding_cache_ttl: int = Field(
+        default=300, ge=0, description="Embedding cache TTL (seconds)"
+    )
+
+    # =========================================================================
+    # STORAGE (S3/MinIO)
+    # =========================================================================
+    s3_endpoint: str = Field(
+        default="", description="S3/MinIO endpoint URL"
+    )
+    s3_bucket: str = Field(
+        default="vla-training-data", description="S3 bucket name"
+    )
+    s3_access_key: str = Field(
+        default="", description="S3 access key"
+    )
+    s3_secret_key: str = Field(
+        default="", description="S3 secret key"
+    )
+    enable_s3_storage: bool = Field(
+        default=False, description="Enable S3 storage"
+    )
+    s3_region: str = Field(
+        default="us-east-1", description="S3 region"
+    )
+
+    # =========================================================================
+    # DATA RETENTION
+    # =========================================================================
+    raw_data_retention_days: int = Field(
+        default=90, ge=-1, description="Raw data retention days (-1 = forever)"
+    )
+    aggregated_data_retention_days: int = Field(
+        default=365, ge=-1, description="Aggregated data retention days"
+    )
+    safety_data_retention_days: int = Field(
+        default=-1, description="Safety incident data retention (-1 = forever)"
+    )
+
+    # =========================================================================
+    # ETL & DATA PIPELINE
+    # =========================================================================
+    etl_schedule_hour: int = Field(
+        default=2, ge=0, le=23, description="ETL daily schedule hour (UTC)"
+    )
+    etl_batch_size: int = Field(
+        default=1000, ge=1, le=10000, description="ETL batch size"
+    )
+    etl_enabled: bool = Field(
+        default=True, description="Enable ETL pipeline"
+    )
+
+    # =========================================================================
+    # CONSENT & PRIVACY
+    # =========================================================================
+    default_consent_tier: str = Field(
+        default="none", description="Default consent tier: none, basic, full"
+    )
+    consent_cache_ttl: int = Field(
+        default=600, ge=0, description="Consent cache TTL (seconds)"
+    )
+
+    # =========================================================================
+    # ANONYMIZATION
+    # =========================================================================
+    anonymization_level: str = Field(
+        default="full", description="Anonymization level: none, partial, full"
+    )
+    anonymization_hash_salt: str = Field(
+        default="change-in-production", description="Salt for anonymization hashing"
+    )
+
+    # =========================================================================
     # DEVELOPMENT SETTINGS
     # =========================================================================
     auto_reload: bool = Field(

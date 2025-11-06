@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.dependencies import get_authenticated_user, get_db
 from src.core.constants import InferenceStatus
+from src.core.redis_client import get_redis
 from src.middleware.authentication import APIKeyInfo
 from src.middleware.rate_limiting import get_remaining_requests
 from src.models.api_models import InferenceRequest, InferenceResponse
@@ -21,6 +22,7 @@ from src.models.api_models import (
     UsageInfo,
 )
 from src.models.database import Customer, InferenceLog, SafetyIncident
+from src.services.consent import get_consent_manager
 from src.services.model_loader import model_manager
 from src.services.safety_monitor import safety_monitor
 from src.services.vla_inference import inference_service
@@ -45,16 +47,23 @@ async def infer_action(
     request: InferenceRequest,
     api_key: APIKeyInfo = Depends(get_authenticated_user),
     session: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
 ):
     """Perform VLA inference to predict robot action from image and instruction.
 
     This endpoint accepts an image and natural language instruction, runs VLA model
     inference, and returns a robot action with safety validation.
 
+    **Privacy Compliance:**
+    - Checks customer consent before storing images or embeddings
+    - Respects data anonymization levels
+    - Only stores data if consent is granted
+
     Args:
         request: Inference request with image, instruction, and optional configs
         api_key: Authenticated API key (injected)
         session: Database session (injected)
+        redis: Redis client for consent caching (injected)
 
     Returns:
         InferenceResponse with action, safety evaluation, and performance metrics
@@ -71,14 +80,31 @@ async def infer_action(
     )
 
     try:
-        # 1. Validate model availability
+        # 1. Check customer consent for data storage
+        consent_manager = get_consent_manager(redis)
+        customer_id_str = str(api_key.customer_id)
+
+        # Get consent preferences (cached for 10 minutes)
+        can_store_images = await consent_manager.can_store_images(
+            customer_id_str, session
+        )
+        can_store_embeddings = await consent_manager.can_store_embeddings(
+            customer_id_str, session
+        )
+
+        logger.info(
+            f"Customer {customer_id_str} consent: "
+            f"images={can_store_images}, embeddings={can_store_embeddings}"
+        )
+
+        # 2. Validate model availability
         if not model_manager.is_model_loaded(request.model):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Model {request.model} is not loaded or available",
             )
 
-        # 2. Decode and validate image
+        # 3. Decode and validate image
         try:
             image = decode_image(request.image)
         except ValueError as e:
@@ -87,11 +113,11 @@ async def infer_action(
                 detail=f"Invalid image: {e}",
             )
 
-        # 3. Prepare robot configuration
+        # 4. Prepare robot configuration
         robot_type = request.robot_config.type if request.robot_config else "franka_panda"
         robot_config_dict = request.robot_config.model_dump() if request.robot_config else None
 
-        # 4. Run VLA inference
+        # 5. Run VLA inference
         inference_start = time.time()
 
         inference_result = await inference_service.infer(
@@ -111,7 +137,7 @@ async def infer_action(
 
         inference_end = time.time()
 
-        # 5. Safety evaluation
+        # 6. Safety evaluation
         safety_start = time.time()
 
         safety_config = request.safety or {}
@@ -163,7 +189,7 @@ async def infer_action(
             final_action = inference_result.action
             inference_status = InferenceStatus.SUCCESS
 
-        # 6. Prepare response
+        # 7. Prepare response
         total_latency_ms = int((time.time() - start_time) * 1000)
 
         # Get remaining requests
@@ -195,14 +221,17 @@ async def infer_action(
             usage=UsageInfo(**usage_info),
         )
 
-        # 7. Log inference to database
+        # 8. Log inference to database (respecting consent)
+        # Note: We always log metadata for analytics, but only store
+        # image_shape if consent allows (image data itself is never stored)
         log_entry = InferenceLog(
             customer_id=api_key.customer_id,
             key_id=api_key.key_id,
             request_id=request_id,
             model_name=request.model,
             instruction=request.instruction,
-            image_shape=[image.height, image.width, 3],
+            # Only store image shape if consent allows any data storage
+            image_shape=[image.height, image.width, 3] if can_store_images else None,
             action_vector=final_action,
             safety_score=safety_result["overall_score"],
             safety_flags=safety_result["flags"],
@@ -212,6 +241,12 @@ async def infer_action(
             status=inference_status.value,
         )
         session.add(log_entry)
+
+        # TODO: If can_store_embeddings is True, store image embeddings
+        # in a separate service (vector database, S3, etc.)
+        if can_store_embeddings:
+            logger.debug(f"Customer {customer_id_str} consent allows embedding storage")
+            # Future: Store embeddings for personalization/analytics
 
         # Update customer monthly usage
         result = await session.execute(

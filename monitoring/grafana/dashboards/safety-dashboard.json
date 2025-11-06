@@ -1,0 +1,307 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "vla-safety",
+    "title": "VLA API Safety Dashboard",
+    "tags": ["vla", "safety", "compliance"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "1m",
+    "time": {
+      "from": "now-7d",
+      "to": "now"
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "Safety Incident Count by Severity",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum by(severity) (increase(vla_safety_incidents_total[1h]))",
+            "legendFormat": "{{severity}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "custom": {
+              "drawStyle": "bars",
+              "fillOpacity": 70
+            },
+            "color": {
+              "mode": "thresholds"
+            },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 5, "color": "yellow"},
+                {"value": 10, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Violation Types Distribution",
+        "type": "piechart",
+        "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "sum by(violation_type) (increase(vla_safety_violations_total[7d]))",
+            "legendFormat": "{{violation_type}}",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0
+          }
+        },
+        "options": {
+          "pieType": "pie",
+          "legend": {"displayMode": "table", "placement": "right", "values": ["value", "percent"]}
+        }
+      },
+      {
+        "id": 3,
+        "title": "Safety Score Trends",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "avg(vla_safety_score)",
+            "legendFormat": "Average Safety Score",
+            "refId": "A"
+          },
+          {
+            "expr": "min(vla_safety_score)",
+            "legendFormat": "Minimum Safety Score",
+            "refId": "B"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "min": 0,
+            "max": 1,
+            "decimals": 3,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 0.7, "color": "yellow"},
+                {"value": 0.9, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Top Violating Customers",
+        "type": "table",
+        "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "topk(10, sum by(customer_id) (increase(vla_safety_violations_total[7d])))",
+            "format": "table",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "align": "left",
+              "displayMode": "color-background"
+            }
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byName", "options": "Value"},
+              "properties": [
+                {
+                  "id": "thresholds",
+                  "value": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"value": 0, "color": "green"},
+                      {"value": 5, "color": "yellow"},
+                      {"value": 10, "color": "red"}
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "showHeader": true,
+          "sortBy": [{"displayName": "Value", "desc": true}]
+        },
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "renameByName": {
+                "customer_id": "Customer ID",
+                "Value": "Violations"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Rejection Rate Over Time",
+        "type": "graph",
+        "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "rate(vla_safety_rejections_total[5m]) / rate(vla_inference_requests_total[5m]) * 100",
+            "legendFormat": "Rejection Rate",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 2,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 1, "color": "yellow"},
+                {"value": 5, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Safety Check Latency",
+        "type": "graph",
+        "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(vla_safety_check_duration_seconds_bucket[5m]))",
+            "legendFormat": "p50",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(vla_safety_check_duration_seconds_bucket[5m]))",
+            "legendFormat": "p95",
+            "refId": "B"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(vla_safety_check_duration_seconds_bucket[5m]))",
+            "legendFormat": "p99",
+            "refId": "C"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "decimals": 3
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Critical Safety Alerts",
+        "type": "stat",
+        "gridPos": {"x": 0, "y": 24, "w": 8, "h": 6},
+        "targets": [
+          {
+            "expr": "sum(increase(vla_safety_incidents_total{severity=\"critical\"}[24h]))",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 1, "color": "red"}
+              ]
+            }
+          }
+        },
+        "options": {
+          "textMode": "value_and_name",
+          "graphMode": "area",
+          "colorMode": "background"
+        }
+      },
+      {
+        "id": 8,
+        "title": "Compliance Score",
+        "type": "gauge",
+        "gridPos": {"x": 8, "y": 24, "w": 8, "h": 6},
+        "targets": [
+          {
+            "expr": "(1 - (sum(increase(vla_safety_violations_total[7d])) / sum(increase(vla_inference_requests_total[7d])))) * 100",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "decimals": 2,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "red"},
+                {"value": 95, "color": "yellow"},
+                {"value": 99, "color": "green"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "False Positive Rate",
+        "type": "stat",
+        "gridPos": {"x": 16, "y": 24, "w": 8, "h": 6},
+        "targets": [
+          {
+            "expr": "sum(increase(vla_safety_false_positives_total[7d])) / sum(increase(vla_safety_checks_total[7d])) * 100",
+            "refId": "A"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 2,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 1, "color": "yellow"},
+                {"value": 5, "color": "red"}
+              ]
+            }
+          }
+        },
+        "options": {
+          "textMode": "value_and_name",
+          "graphMode": "none",
+          "colorMode": "background"
+        }
+      }
+    ]
+  }
+}
