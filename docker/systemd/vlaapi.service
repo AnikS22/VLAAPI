@@ -1,0 +1,46 @@
+# SystemD service file for VLA API
+# Copy to: /etc/systemd/system/vlaapi.service
+# Then run:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable vlaapi
+#   sudo systemctl start vlaapi
+
+[Unit]
+Description=VLA Inference API Service
+Requires=docker.service
+After=docker.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/ubuntu/VLAAPI
+ExecStartPre=/usr/bin/docker-compose --profile prod pull --quiet
+ExecStart=/usr/bin/docker-compose --profile prod up -d
+ExecStop=/usr/bin/docker-compose --profile prod down
+ExecReload=/usr/bin/docker-compose --profile prod restart
+Restart=on-failure
+RestartSec=10s
+
+# Security
+User=ubuntu
+Group=ubuntu
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vlaapi
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=8192
+
+[Install]
+WantedBy=multi-user.target
+
+
+
+
+
+

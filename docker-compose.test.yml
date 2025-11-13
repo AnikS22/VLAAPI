@@ -1,0 +1,85 @@
+version: '3.8'
+
+services:
+  # Test PostgreSQL Database
+  test-db:
+    image: postgres:15-alpine
+    container_name: vla-test-db
+    environment:
+      POSTGRES_DB: vla_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test_pass
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5433:5432"
+    volumes:
+      - test-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_user -d vla_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  # Test Redis Cache
+  test-redis:
+    image: redis:7-alpine
+    container_name: vla-test-redis
+    ports:
+      - "6380:6379"
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save ""
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - test-network
+
+  # Test MinIO (S3-compatible storage)
+  test-minio:
+    image: minio/minio:latest
+    container_name: vla-test-minio
+    environment:
+      MINIO_ROOT_USER: test_access_key
+      MINIO_ROOT_PASSWORD: test_secret_key
+    ports:
+      - "9001:9000"  # API
+      - "9002:9001"  # Console
+    command: server /data --console-address ":9001"
+    volumes:
+      - test-minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - test-network
+
+  # Initialize MinIO buckets
+  test-minio-init:
+    image: minio/mc:latest
+    container_name: vla-test-minio-init
+    depends_on:
+      test-minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set testminio http://test-minio:9000 test_access_key test_secret_key;
+      mc mb testminio/test-vla-data --ignore-existing;
+      mc mb testminio/test-training-data --ignore-existing;
+      mc mb testminio/test-feedback-data --ignore-existing;
+      echo 'MinIO buckets initialized';
+      "
+    networks:
+      - test-network
+
+volumes:
+  test-pg-data:
+  test-minio-data:
+
+networks:
+  test-network:
+    driver: bridge

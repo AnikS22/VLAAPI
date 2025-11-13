@@ -11,8 +11,7 @@ from PIL import Image
 import hashlib
 import io
 
-from src.models.analytics import InstructionAnalytics
-from src.models.context import ContextMetadata
+from src.models.database import InstructionAnalytics, ContextMetadata
 from .embedding_cache import EmbeddingCache
 
 logger = logging.getLogger(__name__)

@@ -60,7 +60,7 @@ class CustomerDataConsentContract(BaseModel):
 
     # === VALIDATORS ===
 
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_consent_tier_logic(cls, values):
         """Ensure consent tier permissions are consistent."""
         tier = values.get('consent_tier')
@@ -95,7 +95,7 @@ class CustomerDataConsentContract(BaseModel):
 
         return values
 
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_anonymization_logic(cls, values):
         """Ensure anonymization is configured correctly."""
         can_store_images = values.get('can_store_images')

@@ -18,6 +18,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        protected_namespaces=(),  # Allow model_* field names
     )
 
     # =========================================================================
@@ -90,7 +91,7 @@ class Settings(BaseSettings):
         default="openvla-7b", description="Default VLA model"
     )
     gpu_device: int = Field(default=0, ge=0, description="CUDA device ID")
-    model_dtype: str = Field(
+    vla_model_dtype: str = Field(
         default="bfloat16", description="Model dtype: float32, float16, bfloat16"
     )
     low_cpu_mem_usage: bool = Field(
@@ -384,6 +385,28 @@ class Settings(BaseSettings):
     )
 
     # =========================================================================
+    # STRIPE BILLING SETTINGS
+    # =========================================================================
+    stripe_api_key: Optional[str] = Field(
+        default=None, description="Stripe secret API key"
+    )
+    stripe_publishable_key: Optional[str] = Field(
+        default=None, description="Stripe publishable key"
+    )
+    stripe_webhook_secret: Optional[str] = Field(
+        default=None, description="Stripe webhook signing secret"
+    )
+    stripe_price_id_pro: Optional[str] = Field(
+        default=None, description="Stripe Price ID for Pro tier ($499/mo)"
+    )
+    stripe_price_id_enterprise: Optional[str] = Field(
+        default=None, description="Stripe Price ID for Enterprise tier (custom)"
+    )
+    enable_stripe: bool = Field(
+        default=False, description="Enable Stripe billing integration"
+    )
+
+    # =========================================================================
     # DEVELOPMENT SETTINGS
     # =========================================================================
     auto_reload: bool = Field(
@@ -393,6 +416,23 @@ class Settings(BaseSettings):
         default=False, description="Use mock models for testing"
     )
 
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        """Parse CORS origins from JSON string or list."""
+        if isinstance(v, str):
+            import json
+            try:
+                # Try parsing as JSON array
+                parsed = json.loads(v)
+                if isinstance(parsed, list):
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+            # Fallback: treat as comma-separated
+            return [origin.strip() for origin in v.split(",")]
+        return v
+
     @field_validator("enabled_models", mode="before")
     @classmethod
     def parse_enabled_models(cls, v):
@@ -401,7 +441,7 @@ class Settings(BaseSettings):
             return [model.strip() for model in v.split(",")]
         return v
 
-    @field_validator("model_dtype")
+    @field_validator("vla_model_dtype")
     @classmethod
     def validate_dtype(cls, v):
         """Validate model dtype."""

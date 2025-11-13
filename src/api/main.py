@@ -10,7 +10,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
 
-from src.api.routers import inference, models, monitoring, streaming
+from src.api.routers import (
+    analytics,
+    api_keys,
+    auth,
+    billing,
+    inference,
+    models,
+    monitoring,
+    streaming,
+    users,
+)
 from src.api.routers.feedback import router as feedback_router
 from src.core.config import settings
 from src.core.database import close_db, init_db
@@ -50,6 +60,17 @@ async def lifespan(app: FastAPI):
     logger.info(f"Debug mode: {settings.debug}")
 
     try:
+        # Validate critical environment variables
+        logger.info("Validating environment configuration")
+        if not settings.database_url:
+            raise ValueError("DATABASE_URL environment variable is required")
+        if not settings.redis_url:
+            raise ValueError("REDIS_URL environment variable is required")
+        if settings.is_production and settings.secret_key == "insecure-secret-key-change-in-production":
+            raise ValueError("SECRET_KEY must be set to a secure value in production")
+
+        logger.info("Environment configuration validated successfully")
+
         # Set application info in Prometheus
         application_info.info({
             "version": settings.app_version,
@@ -182,11 +203,32 @@ if settings.enable_prometheus:
     logger.info("Prometheus metrics endpoint mounted at /metrics")
 
 # Include routers
+# Authentication & User Management
+app.include_router(auth.router)
+app.include_router(users.router)
+
+# API Keys & Billing
+app.include_router(api_keys.router)
+app.include_router(billing.router)
+
+# Analytics
+app.include_router(analytics.router)
+
+# Core VLA Inference
 app.include_router(inference.router)
 app.include_router(models.router)
-app.include_router(monitoring.router)
 app.include_router(streaming.router)  # WebSocket streaming
+
+# Feedback & Monitoring
 app.include_router(feedback_router)  # Feedback for ground truth collection
+app.include_router(monitoring.router)
+
+# Admin endpoints (require superuser access)
+from src.api.routers.admin import stats_router, customers_router, safety_router, monitoring_router as admin_monitoring_router
+app.include_router(stats_router)
+app.include_router(customers_router)
+app.include_router(safety_router)
+app.include_router(admin_monitoring_router)
 
 
 # Root endpoint

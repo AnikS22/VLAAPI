@@ -33,6 +33,82 @@ except ImportError:
 Base = declarative_base()
 
 
+class User(Base):
+    """User authentication model."""
+
+    __tablename__ = "users"
+    __table_args__ = (
+        Index("idx_users_email", "email", unique=True),
+        Index("idx_users_email_verified", "email_verified"),
+        {"schema": "vlaapi"},
+    )
+
+    user_id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        nullable=False,
+    )
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=False)
+    full_name = Column(String(255), nullable=True)
+
+    # Email verification
+    email_verified = Column(Boolean, nullable=False, default=False)
+    email_verification_token = Column(String(255), nullable=True)
+    email_verification_sent_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Account status
+    is_active = Column(Boolean, nullable=False, default=True)
+    is_superuser = Column(Boolean, nullable=False, default=False)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+
+    # User metadata (renamed from metadata to avoid SQLAlchemy conflict)
+    user_metadata = Column(JSONB, nullable=True)
+
+    # Relationships
+    customers = relationship("Customer", back_populates="user")
+    password_resets = relationship("PasswordReset", back_populates="user", cascade="all, delete-orphan")
+
+    def __repr__(self) -> str:
+        return f"<User(id={self.user_id}, email={self.email})>"
+
+
+class PasswordReset(Base):
+    """Password reset token model."""
+
+    __tablename__ = "password_resets"
+    __table_args__ = (
+        Index("idx_password_resets_token", "token", unique=True),
+        Index("idx_password_resets_user", "user_id"),
+        Index("idx_password_resets_expires", "expires_at"),
+        {"schema": "vlaapi"},
+    )
+
+    reset_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("vlaapi.users.user_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    token = Column(String(255), unique=True, nullable=False, index=True)
+
+    # Lifecycle
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    user = relationship("User", back_populates="password_resets")
+
+    def __repr__(self) -> str:
+        return f"<PasswordReset(id={self.reset_id}, user_id={self.user_id})>"
+
+
 class Customer(Base):
     """Customer/user account model."""
 
@@ -50,9 +126,19 @@ class Customer(Base):
         default=uuid.uuid4,
         nullable=False,
     )
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("vlaapi.users.user_id", ondelete="CASCADE"),
+        nullable=True,  # Nullable for backward compatibility with existing customers
+    )
     email = Column(String(255), unique=True, nullable=False, index=True)
     company_name = Column(String(255), nullable=True)
     tier = Column(String(50), nullable=False, default="free")
+
+    # Stripe Integration
+    stripe_customer_id = Column(String(255), nullable=True, unique=True)
+    stripe_subscription_id = Column(String(255), nullable=True)
+    stripe_subscription_status = Column(String(50), nullable=True)  # active, canceled, past_due, etc.
 
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -67,10 +153,11 @@ class Customer(Base):
     monthly_quota = Column(Integer, nullable=True)  # NULL = unlimited
     monthly_usage = Column(Integer, nullable=False, default=0)
 
-    # Metadata (flexible JSONB for custom fields)
-    metadata = Column(JSONB, nullable=True)
+    # Customer metadata (renamed from metadata to avoid SQLAlchemy conflict)
+    customer_metadata = Column(JSONB, nullable=True)
 
     # Relationships
+    user = relationship("User", back_populates="customers")
     api_keys = relationship("APIKey", back_populates="customer", cascade="all, delete-orphan")
     inference_logs = relationship("InferenceLog", back_populates="customer")
     safety_incidents = relationship("SafetyIncident", back_populates="customer")

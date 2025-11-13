@@ -46,8 +46,16 @@ from .consent import (
 
 # Feedback contracts
 from .feedback import (
+    ActionCorrectionRequest,
+    FailureReportRequest,
     FeedbackContract,
+    FeedbackDetailResponse,
+    FeedbackListResponse,
+    FeedbackResponse,
+    FeedbackStatsResponse,
     FeedbackType,
+    SafetyRatingRequest,
+    SuccessRatingRequest,
 )
 
 __all__ = [
@@ -82,8 +90,16 @@ __all__ = [
     'AnonymizationLevel',
 
     # Feedback
+    'ActionCorrectionRequest',
+    'FailureReportRequest',
     'FeedbackContract',
+    'FeedbackDetailResponse',
+    'FeedbackListResponse',
+    'FeedbackResponse',
+    'FeedbackStatsResponse',
     'FeedbackType',
+    'SafetyRatingRequest',
+    'SuccessRatingRequest',
 ]
 
 # Validation rule counts by module

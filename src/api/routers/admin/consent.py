@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.database import get_db
+from src.api.dependencies import get_db
 from src.core.dependencies import get_redis
 from src.models.contracts.consent import (
     AnonymizationLevel,

@@ -33,6 +33,97 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/v1", tags=["inference"])
 
 
+from pydantic import BaseModel
+from typing import List, Optional
+from datetime import datetime
+from sqlalchemy import desc, and_
+
+
+class InferenceHistoryResponse(BaseModel):
+    logs: List[dict]
+    total_count: int
+    page: int
+    limit: int
+    total_pages: int
+
+
+@router.get("/inference/history", response_model=InferenceHistoryResponse)
+async def get_inference_history(
+    page: int = 1,
+    limit: int = 20,
+    status: Optional[str] = None,
+    robot_type: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    api_key: APIKeyInfo = Depends(get_authenticated_user),
+    session: AsyncSession = Depends(get_db),
+):
+    """
+    Get paginated inference history for the authenticated customer.
+
+    Args:
+        page: Page number (1-indexed)
+        limit: Items per page
+        status: Filter by status (success/error)
+        robot_type: Filter by robot type
+        start_date: Filter by start date (ISO format)
+        end_date: Filter by end date (ISO format)
+        api_key: Authenticated API key
+        session: Database session
+
+    Returns:
+        Paginated list of inference logs
+    """
+    offset = (page - 1) * limit
+
+    # Build query filters
+    filters = [InferenceLog.customer_id == api_key.customer_id]
+
+    if status:
+        filters.append(InferenceLog.status == status)
+    if robot_type:
+        filters.append(InferenceLog.robot_type == robot_type)
+    if start_date:
+        filters.append(InferenceLog.timestamp >= datetime.fromisoformat(start_date))
+    if end_date:
+        filters.append(InferenceLog.timestamp <= datetime.fromisoformat(end_date))
+
+    # Count total
+    from sqlalchemy import func
+    count_query = select(func.count(InferenceLog.log_id)).where(and_(*filters))
+    count_result = await session.execute(count_query)
+    total_count = count_result.scalar() or 0
+
+    # Get logs
+    logs_query = select(InferenceLog).where(
+        and_(*filters)
+    ).order_by(desc(InferenceLog.timestamp)).offset(offset).limit(limit)
+
+    logs_result = await session.execute(logs_query)
+    logs = [
+        {
+            "log_id": str(log.log_id),
+            "timestamp": log.timestamp.isoformat(),
+            "instruction": log.instruction,
+            "robot_type": log.robot_type,
+            "environment_type": log.environment_type,
+            "status": log.status,
+            "latency_ms": log.latency_ms,
+            "safety_score": log.safety_score,
+            "action_vector": log.action_vector
+        }
+        for log in logs_result.scalars()
+    ]
+
+    return {
+        "logs": logs,
+        "total_count": total_count,
+        "page": page,
+        "limit": limit,
+        "total_pages": (total_count + limit - 1) // limit
+    }
+
+
 @router.post(
     "/inference",
     response_model=InferenceResponse,

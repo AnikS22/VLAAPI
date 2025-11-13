@@ -58,7 +58,7 @@ class VLAModelManager:
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
         }
-        return dtype_map.get(settings.model_dtype, torch.bfloat16)
+        return dtype_map.get(settings.vla_model_dtype, torch.bfloat16)
 
     async def load_model(self, model_id: str) -> None:
         """Load a VLA model into GPU memory.

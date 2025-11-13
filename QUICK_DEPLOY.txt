@@ -1,0 +1,134 @@
+================================================================================
+                    PRAXIS LABS - QUICK CLOUD DEPLOYMENT
+================================================================================
+
+YOUR FRONTEND IS LIVE:
+https://frontend-1gp6cxaq3-aniksahai-icloudcoms-projects.vercel.app
+
+NOW DEPLOY BACKEND IN 10 MINUTES:
+
+================================================================================
+OPTION 1: RAILWAY ($5/month) - FASTEST
+================================================================================
+
+You're already logged in to Railway!
+
+1. UPGRADE RAILWAY:
+   → Open: https://railway.com/account/billing
+   → Click: "Upgrade to Hobby Plan" ($5/month)
+   → Enter payment details
+
+2. DEPLOY (run these commands):
+   cd /Users/aniksahai/Desktop/VLAAPI
+   railway add --database postgres
+   railway add --database redis
+   railway up
+
+3. SETUP DATABASE:
+   railway run psql $DATABASE_URL < migrations/001_create_users_and_auth.sql
+
+4. CREATE ADMIN:
+   railway run psql $DATABASE_URL << 'SQL'
+   INSERT INTO vlaapi.users (email, hashed_password, full_name, is_superuser, is_active, email_verified)
+   VALUES ('admin@praxislabs.com', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5ND0azvKJMJtu', 'Admin User', true, true, true);
+   SQL
+
+5. GET BACKEND URL:
+   railway status
+   (Copy the URL)
+
+================================================================================
+OPTION 2: RENDER (FREE) - NO PAYMENT NEEDED
+================================================================================
+
+1. CREATE ACCOUNT:
+   → Open: https://render.com
+   → Sign up with GitHub
+
+2. DEPLOY POSTGRESQL:
+   → New + → PostgreSQL
+   → Name: praxis-postgres
+   → Plan: Free
+   → COPY "Internal Database URL"
+
+3. DEPLOY BACKEND:
+   → New + → Web Service
+   → Connect GitHub → Select VLAAPI repo
+   → Runtime: Python 3
+   → Build: pip install -r requirements.txt
+   → Start: gunicorn src.api.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+   → Plan: Free (or Starter $7/month for always-on)
+
+4. ADD ENVIRONMENT VARIABLES (in Render dashboard):
+   DATABASE_URL = <paste Internal Database URL>
+   REDIS_URL = redis://localhost:6379/0
+   JWT_SECRET_KEY = <generate with: python3 -c "import secrets; print(secrets.token_urlsafe(32))">
+   STRIPE_SECRET_KEY = sk_test_your_test_key
+   CORS_ORIGINS = https://frontend-1gp6cxaq3-aniksahai-icloudcoms-projects.vercel.app
+   ENVIRONMENT = production
+   DEBUG = false
+
+5. MIGRATE DATABASE:
+   → Go to PostgreSQL service → SQL Editor
+   → Paste contents of: migrations/001_create_users_and_auth.sql
+   → Execute
+
+6. CREATE ADMIN USER (in SQL Editor):
+   INSERT INTO vlaapi.users (email, hashed_password, full_name, is_superuser, is_active, email_verified)
+   VALUES ('admin@praxislabs.com', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5ND0azvKJMJtu', 'Admin User', true, true, true);
+
+7. COPY BACKEND URL:
+   https://praxis-backend-api.onrender.com
+
+================================================================================
+UPDATE FRONTEND (REQUIRED FOR BOTH OPTIONS)
+================================================================================
+
+1. GO TO VERCEL:
+   https://vercel.com/aniksahai-icloudcoms-projects/frontend/settings/environment-variables
+
+2. ADD VARIABLES:
+   NEXT_PUBLIC_API_URL = <your-backend-url>
+   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = pk_test_your_test_key
+
+3. REDEPLOY:
+   → Deployments tab
+   → Click "..." on latest → "Redeploy"
+
+================================================================================
+TEST EVERYTHING
+================================================================================
+
+1. Backend health:
+   curl <your-backend-url>/
+
+2. Frontend:
+   https://frontend-1gp6cxaq3-aniksahai-icloudcoms-projects.vercel.app
+
+3. Register user:
+   → Click "Sign up"
+   → Create account
+
+4. Create API key:
+   → Dashboard → API Keys → Create
+
+5. Test admin:
+   → Login as: admin@praxislabs.com / AdminPass123!
+   → Visit /admin
+
+================================================================================
+ADMIN CREDENTIALS
+================================================================================
+
+Email: admin@praxislabs.com
+Password: AdminPass123!
+
+⚠️ CHANGE THIS PASSWORD AFTER FIRST LOGIN!
+
+================================================================================
+FULL DOCUMENTATION
+================================================================================
+
+See: /Users/aniksahai/Desktop/VLAAPI/DEPLOY_NOW.md
+
+================================================================================

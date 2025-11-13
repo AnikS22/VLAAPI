@@ -14,7 +14,7 @@ from src.api.dependencies import get_db
 from src.core.config import settings
 from src.core.database import db_manager
 from src.core.redis_client import redis_manager
-from src.middleware.authentication import api_key_auth
+from src.middleware.authentication import get_current_api_key as api_key_auth
 from src.models.api_models import GPUInfo, HealthCheckResponse, ServiceHealth
 from src.models.database import Customer
 from src.monitoring.gpu_monitor import gpu_monitor

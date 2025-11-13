@@ -302,7 +302,7 @@ class InferenceLogContract(BaseModel):
             raise ValueError("error_message is required when status=error")
         return v
 
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_safety_consistency(cls, values):
         """Ensure safety_score and status are consistent."""
         status = values.get('status')
@@ -319,7 +319,7 @@ class InferenceLogContract(BaseModel):
 
         return values
 
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_latency_consistency(cls, values):
         """Ensure latency metrics are consistent."""
         inference_latency = values.get('inference_latency_ms')
@@ -337,7 +337,7 @@ class InferenceLogContract(BaseModel):
 
         return values
 
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def compute_derived_fields(cls, values):
         """Compute derived fields from input data."""
         # Compute action magnitude (L2 norm)

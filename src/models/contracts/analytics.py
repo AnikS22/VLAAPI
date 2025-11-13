@@ -4,7 +4,7 @@ Pydantic models for robot performance metrics, instruction analytics,
 and context metadata.
 """
 
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, validator, field_validator, root_validator
 from typing import Optional, List
 from datetime import datetime, date
 from uuid import UUID
@@ -138,7 +138,7 @@ class RobotPerformanceMetricsContract(BaseModel):
             raise ValueError(f"aggregation_date cannot be in future. Got {v}, today is {today}")
         return v
 
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_latency_ordering(cls, values):
         """Ensure latency percentiles are properly ordered: p50 <= p95 <= p99."""
         p50 = values.get('p50_latency_ms')
@@ -336,7 +336,7 @@ class InstructionAnalyticsContract(BaseModel):
 
         return v
 
-    @root_validator
+    @root_validator(skip_on_failure=True)
     def validate_temporal_consistency(cls, values):
         """Ensure first_seen <= last_seen."""
         first_seen = values.get('first_seen')
@@ -386,31 +386,34 @@ class WorkspaceBounds(BaseModel):
     units: str = Field("meters", description="Units (always 'meters')")
     coordinate_frame: str = Field("robot_base", description="Coordinate frame reference")
 
-    @validator('x', 'y', 'z')
-    def validate_bounds(cls, v, field):
+    @field_validator('x', 'y', 'z')
+    @classmethod
+    def validate_bounds(cls, v, info):
         """Ensure min < max for each axis."""
+        field_name = info.field_name
+
         if 'min' not in v or 'max' not in v:
-            raise ValueError(f"{field.name} must have 'min' and 'max' keys")
+            raise ValueError(f"{field_name} must have 'min' and 'max' keys")
 
         min_val = v['min']
         max_val = v['max']
 
         if not isinstance(min_val, (int, float)) or not isinstance(max_val, (int, float)):
-            raise ValueError(f"{field.name} min/max must be numbers")
+            raise ValueError(f"{field_name} min/max must be numbers")
 
         if not (math.isfinite(min_val) and math.isfinite(max_val)):
-            raise ValueError(f"{field.name} min/max must be finite numbers")
+            raise ValueError(f"{field_name} min/max must be finite numbers")
 
         if min_val >= max_val:
             raise ValueError(
-                f"{field.name} min ({min_val}) must be less than max ({max_val})"
+                f"{field_name} min ({min_val}) must be less than max ({max_val})"
             )
 
         # Reasonable workspace bounds (most robots work within ±5m)
         if not (-5.0 <= min_val <= 5.0):
-            raise ValueError(f"{field.name} min ({min_val}) outside reasonable range [-5, 5] meters")
+            raise ValueError(f"{field_name} min ({min_val}) outside reasonable range [-5, 5] meters")
         if not (-5.0 <= max_val <= 5.0):
-            raise ValueError(f"{field.name} max ({max_val}) outside reasonable range [-5, 5] meters")
+            raise ValueError(f"{field_name} max ({max_val}) outside reasonable range [-5, 5] meters")
 
         return v
 
