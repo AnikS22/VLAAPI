@@ -90,13 +90,37 @@ class InferenceOptions(BaseModel):
 class InferenceRequest(BaseModel):
     """Request model for VLA inference."""
 
-    model: str = Field(
-        default="openvla-7b",
-        description="VLA model to use (openvla-7b, pi0, pi0-fast)",
+    model: Optional[str] = Field(
+        default=None,
+        description="VLA model to use (openvla-7b-v2, rt-1, octo-base, etc.). If None, auto-selects optimal model.",
     )
     image: str = Field(
         ...,
         description="Base64-encoded image or image URL",
+    )
+
+    # Model routing preferences (NEW)
+    max_latency_ms: Optional[float] = Field(
+        default=None,
+        description="Maximum acceptable latency in milliseconds (e.g., 100 for real-time)",
+    )
+    min_accuracy: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Minimum required accuracy (0.0-1.0)",
+    )
+    optimize_latency: bool = Field(
+        default=False,
+        description="Optimize for fastest inference (select fastest compatible model)",
+    )
+    optimize_cost: bool = Field(
+        default=False,
+        description="Optimize for lowest cost (select cheapest compatible model)",
+    )
+    optimize_accuracy: bool = Field(
+        default=False,
+        description="Optimize for highest accuracy (select most accurate compatible model)",
     )
     instruction: str = Field(
         ...,

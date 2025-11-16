@@ -23,7 +23,9 @@ from src.models.api_models import (
 )
 from src.models.database import Customer, InferenceLog, SafetyIncident
 from src.services.consent import get_consent_manager
-from src.services.model_loader import model_manager
+from src.services.multi_model_manager import multi_model_manager
+from src.services.model_router import ModelRouter, RoutingConstraints
+from src.services.version_manager import VersionManager
 from src.services.safety_monitor import safety_monitor
 from src.services.vla_inference import inference_service
 from src.utils.image_processing import decode_image
@@ -188,12 +190,74 @@ async def infer_action(
             f"images={can_store_images}, embeddings={can_store_embeddings}"
         )
 
-        # 2. Validate model availability
-        if not model_manager.is_model_loaded(request.model):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Model {request.model} is not loaded or available",
+        # 2. Model Selection & Routing
+        # Determine robot type
+        robot_type = request.robot_config.type if request.robot_config else "franka_panda"
+
+        # Initialize router and version manager
+        router = ModelRouter(multi_model_manager)
+        version_manager = VersionManager(session)
+
+        # Select model based on customer preferences and constraints
+        if request.model:
+            # Explicit model choice - check if it's a base model ID (needs versioning)
+            if "-v" not in request.model:  # e.g., "openvla-7b" without version
+                # Route to version using A/B testing
+                try:
+                    selected_model_id = await version_manager.route_by_version(
+                        model_id=request.model,
+                        customer_id=api_key.customer_id
+                    )
+                except Exception as e:
+                    logger.warning(f"Version routing failed: {e}, using explicit model")
+                    selected_model_id = request.model
+            else:
+                # Explicit versioned model (e.g., "openvla-7b-v2")
+                selected_model_id = request.model
+
+            routing_reason = "explicit_customer_choice"
+            routing_confidence = 1.0
+            routing_alternatives = []
+        else:
+            # Auto-select optimal model using router
+            constraints = RoutingConstraints(
+                robot_type=robot_type,
+                max_latency_ms=request.max_latency_ms,
+                min_accuracy=request.min_accuracy,
+                optimize_latency=request.optimize_latency,
+                optimize_cost=request.optimize_cost,
+                optimize_accuracy=request.optimize_accuracy
             )
+
+            # Get customer preferences (model pins, etc.)
+            customer_result = await session.execute(
+                select(Customer).where(Customer.customer_id == api_key.customer_id)
+            )
+            customer = customer_result.scalar_one()
+            customer_prefs = customer.model_preferences or {}
+
+            # Route request
+            routing_decision = router.select_model(constraints, customer_prefs)
+            selected_model_id = routing_decision.selected_model_id
+            routing_reason = routing_decision.selection_reason
+            routing_confidence = routing_decision.confidence_score
+            routing_alternatives = routing_decision.alternatives
+
+            logger.info(
+                f"Auto-selected model {selected_model_id} "
+                f"(reason: {routing_reason}, confidence: {routing_confidence:.2f})"
+            )
+
+        # Ensure model is loaded (lazy loading)
+        if not multi_model_manager.is_model_loaded(selected_model_id):
+            logger.info(f"Lazy-loading model {selected_model_id}")
+            try:
+                await multi_model_manager.load_model(selected_model_id)
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Failed to load model {selected_model_id}: {str(e)}"
+                )
 
         # 3. Decode and validate image
         try:
@@ -208,16 +272,22 @@ async def infer_action(
         robot_type = request.robot_config.type if request.robot_config else "franka_panda"
         robot_config_dict = request.robot_config.model_dump() if request.robot_config else None
 
-        # 5. Run VLA inference
+        # 5. Run VLA inference with selected model
         inference_start = time.time()
 
         inference_result = await inference_service.infer(
-            model_id=request.model,
+            model_id=selected_model_id,
             image=image,
             instruction=request.instruction,
             robot_type=robot_type,
             robot_config=robot_config_dict,
             timeout=10.0,
+        )
+
+        # Record inference stats in model manager
+        multi_model_manager.record_inference(
+            selected_model_id,
+            latency_ms=(time.time() - inference_start) * 1000
         )
 
         if not inference_result.success:
@@ -289,7 +359,7 @@ async def infer_action(
         response = InferenceResponse(
             request_id=request_id,
             timestamp=start_time,
-            model=request.model,
+            model=selected_model_id,  # Return the actual model used, not requested
             action=ActionResponse(
                 type="end_effector_delta",
                 dimensions=len(final_action),
@@ -319,7 +389,7 @@ async def infer_action(
             customer_id=api_key.customer_id,
             key_id=api_key.key_id,
             request_id=request_id,
-            model_name=request.model,
+            model_name=selected_model_id,  # Log the actual model used
             instruction=request.instruction,
             # Only store image shape if consent allows any data storage
             image_shape=[image.height, image.width, 3] if can_store_images else None,
@@ -330,8 +400,23 @@ async def infer_action(
             queue_wait_ms=inference_result.queue_wait_ms,
             gpu_compute_ms=inference_result.inference_ms,
             status=inference_status.value,
+            # Store routing metadata (if model_name is JSONB or we have a metadata field)
+            # metadata={
+            #     "routing_reason": routing_reason,
+            #     "routing_confidence": routing_confidence,
+            #     "routing_alternatives": routing_alternatives,
+            #     "requested_model": request.model,
+            #     "selected_model": selected_model_id
+            # }
         )
         session.add(log_entry)
+
+        # Log routing decision for analytics
+        logger.info(
+            f"Routing decision for {request_id}: "
+            f"selected={selected_model_id}, reason={routing_reason}, "
+            f"confidence={routing_confidence:.2f}"
+        )
 
         # TODO: If can_store_embeddings is True, store image embeddings
         # in a separate service (vector database, S3, etc.)
