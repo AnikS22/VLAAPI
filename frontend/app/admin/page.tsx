@@ -6,7 +6,7 @@ import { api } from "@/lib/api-client";
 import { Users, TrendingUp, Shield, DollarSign, Activity, AlertTriangle } from "lucide-react";
 
 export default function AdminOverviewPage() {
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats } = useQuery({
     queryKey: ["admin-stats"],
     queryFn: () => api.getAdminStats(),
   });

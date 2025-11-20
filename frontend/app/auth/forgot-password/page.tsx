@@ -26,7 +26,7 @@ export default function ForgotPasswordPage() {
         title: "Password reset email sent",
         description: "Check your inbox for password reset instructions",
       });
-    } catch (error: any) {
+    } catch {
       // Always show success to prevent email enumeration
       setSubmitted(true);
       toast({

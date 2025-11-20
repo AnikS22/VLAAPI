@@ -6,7 +6,7 @@ import { api } from "@/lib/api-client";
 import { Activity, Cpu, Database, Zap, Server, HardDrive } from "lucide-react";
 
 export default function MonitoringPage() {
-  const { data: health, isLoading: healthLoading } = useQuery({
+  const { data: health } = useQuery({
     queryKey: ["system-health"],
     queryFn: () => api.getSystemHealth(),
     refetchInterval: 30000, // Refresh every 30 seconds

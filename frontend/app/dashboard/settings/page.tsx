@@ -91,7 +91,7 @@ export default function SettingsPage() {
       const cancelUrl = `${window.location.origin}/dashboard/settings?upgrade=cancelled`;
       const { url } = await api.createCheckoutSession(tier, successUrl, cancelUrl);
       window.location.href = url;
-    } catch (error) {
+    } catch {
       toast({ title: "Checkout failed", description: "Unable to create checkout session", variant: "destructive" });
     }
   };
@@ -101,7 +101,7 @@ export default function SettingsPage() {
       const returnUrl = `${window.location.origin}/dashboard/settings`;
       const { url } = await api.getBillingPortal(returnUrl);
       window.location.href = url;
-    } catch (error) {
+    } catch {
       toast({ title: "Portal access failed", description: "Unable to open billing portal", variant: "destructive" });
     }
   };

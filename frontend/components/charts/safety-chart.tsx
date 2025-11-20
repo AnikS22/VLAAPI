@@ -12,14 +12,6 @@ export function SafetyChart({ incidents_by_type }: SafetyChartProps) {
     count,
   }));
 
-  const getSeverityColor = (type: string) => {
-    const lowerType = type.toLowerCase();
-    if (lowerType.includes("collision") || lowerType.includes("critical")) return "#ef4444";
-    if (lowerType.includes("constraint") || lowerType.includes("high")) return "#f97316";
-    if (lowerType.includes("velocity") || lowerType.includes("medium")) return "#eab308";
-    return "#3b82f6";
-  };
-
   return (
     <div>
       <h3 className="text-lg font-semibold mb-4">Safety Incidents by Type</h3>

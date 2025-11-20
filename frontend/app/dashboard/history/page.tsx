@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api-client";
-import { ChevronLeft, ChevronRight, History, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, History } from "lucide-react";
 
 export default function HistoryPage() {
   const [page, setPage] = useState(1);
